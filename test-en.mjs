@@ -1,0 +1,10 @@
+import { env } from '@huggingface/transformers';
+env.remoteHost = 'https://hf-mirror.com/';
+const { KokoroTTS } = await import('kokoro-js');
+const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', { dtype: 'q8', device: 'cpu' });
+const t1 = Date.now();
+const audio = await tts.generate('Hello world, the prototype works.', { voice: 'af_heart' });
+console.log('[gen]', Date.now() - t1, 'ms');
+await audio.save('/tmp/test-en.wav');
+console.log('[saved]');
+process.exit(0);

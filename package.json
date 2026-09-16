@@ -1,0 +1,88 @@
+{
+  "name": "dsh-voice-mini",
+  "version": "0.3.2",
+  "description": "Voice-feedback plugin for DeepSeek Harness: a speak tool, readReplies narration, an LLM verbalizer pass, per-session voices, chimes, a monitoring panel, and a native macOS floating pet. zh/en i18n.",
+  "license": "MIT",
+  "author": "zane",
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "harness",
+    "voice",
+    "tts",
+    "text-to-speech",
+    "edge-tts",
+    "kokoro",
+    "accessibility",
+    "assistant",
+    "plugin",
+    "cordis"
+  ],
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "scripts/synth-kokoro.mjs",
+    "scripts/synth-edge.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "pet/Package.swift",
+    "pet/Sources",
+    "pet/README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/build-client.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "test": "node test-plugin.mjs",
+    "test:tts": "node test-kokoro.mjs",
+    "pet:build": "DEVELOPER_DIR=/Library/Developer/CommandLineTools swift build --package-path pet -c release",
+    "pet": "pet/.build/release/voice-pet",
+    "pet:selftest": "pet/.build/release/voice-pet --selftest",
+    "test:pet": "DSH_VOICE_MINI_RUNTIME=/tmp/voice-pet-e2e.json node test-pet-e2e.mjs",
+    "test:presets": "node test-presets.mjs",
+    "test:agency": "node test-agency.mjs",
+    "test:voices": "node test-voices.mjs",
+    "test:summarize": "node test-summarize.mjs",
+    "test:i18n": "node test-i18n.mjs",
+    "test:reroll": "node test-reroll.mjs",
+    "test:persist": "node test-persist.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [],
+      "immediately": true
+    }
+  },
+  "dependencies": {
+    "kokoro-js": "^1.2.1",
+    "node-edge-tts": "^1.2.10"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-scope": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "esbuild": "^0.25.0",
+    "react": "^18.2.0",
+    "typescript": "^5.9.0"
+  }
+}

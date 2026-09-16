@@ -1,0 +1,18 @@
+# Source — the published package ships only compiled lib/ + the client bundle.
+src/
+tsconfig.json
+tsconfig.*.json
+
+# Tests + dev scripts (not needed at runtime)
+test-*.mjs
+scripts/build-client.mjs
+
+# Pet build artifacts (the source ships so macOS users can `swift build`)
+pet/.build/
+pet/.swiftpm/
+
+# Editor / OS noise
+.DS_Store
+*.log
+.vscode/
+.idea/

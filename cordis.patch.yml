@@ -1,0 +1,13 @@
+# dsh-voice-mini bundle layer — PROTOTYPE. Neutral defaults only.
+# Users override per-profile in their own cordis.patch.yml, addressing this
+# row BY ID (never insert a second row with the same id).
+- insert:
+    - id: dsh-voice-mini
+      name: 'dsh-voice-mini'
+      config:
+        backend: edge          # edge | kokoro | say | fake
+        voice: zh-CN-XiaoxiaoNeural
+        readReplies: false
+        audioDir: ~/.dsh/voice-mini
+        summarizeProvider: ''   # empty = auto-detect the first LLM adapter
+        summarizeModel: ''     # empty = verbalizer stays on the template phrase until you pick a model in the panel

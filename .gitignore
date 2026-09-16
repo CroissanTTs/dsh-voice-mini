@@ -1,0 +1,7 @@
+node_modules/
+pet/.build/
+pet/.swiftpm/
+*.log
+.DS_Store
+.vscode/
+.idea/
