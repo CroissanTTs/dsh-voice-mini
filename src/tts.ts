@@ -66,7 +66,7 @@ function pct(n: number): string {
 const ZH_DIGIT = (d: string): string => '零一二三四五六七八九'[Number(d)] ?? d;
 export function digitsToZh(text: string): string {
   return text
-    .replace(/\d+(?:\.\d+)+/g, (m) => m.split('.').map((part) => part.split('').map(ZH_DIGIT).join('')).join('点'))
+    .replace(/\d+(?:\.\d+)+/g, (m) => m.split('.').map((part) => part.split('').map(ZH_DIGIT).join('')).join(' 点 '))
     .replace(/\d/g, ZH_DIGIT);
 }
 
