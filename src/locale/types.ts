@@ -27,6 +27,7 @@ export interface LocaleDict {
     chime: string;      // 提示音 / Chime
     test: string;       // 试听 / Test
     info: string;       // 信息 / Info
+    queue: string;      // 队列 / Queue
     metrics: string;    // 监控 / Monitor
   };
 
@@ -81,6 +82,8 @@ export interface LocaleDict {
     rerollVoice: string;      // 重新随机声音 / Re-roll voice
     pause: string;            // 暂停 / Pause
     resume: string;           // 继续 / Resume
+    skip: string;             // 跳过 / Skip
+    replay: string;           // 重播本会话 / Replay session
     settingsHint: string;     // 持久设置在「设置 → dsh-voice-mini」分区 / Persistent settings under "Settings → dsh-voice-mini"
     titleAttr: string;        // 语音反馈 (button title) / Voice feedback
     header: string;           // 语音反馈 / Voice feedback

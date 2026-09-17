@@ -426,7 +426,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
 
   // ── pet state (native floating widget, see pet/ + src/pet.ts) ────────────
   /** Non-null only while an utterance is playing — drives the pet's animation. */
-  let speaking: { kind: QueueItem['kind']; text: string; startedAt: number; voice: string } | null = null;
+  let speaking: { kind: string; text: string; startedAt: number; voice: string } | null = null;
   /** Something the human should act on (approval / question) — pet looks alert. */
   let attention: { kind: 'approval' | 'question'; text: string } | null = null;
   /** Tool names already named aloud this turn (即时 mode dedup). */
@@ -753,6 +753,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       pumping,
       paused,
       recent: recent.slice(-15),
+      /** The queue visible to the panel (session label + text + kind), so the
+       * user can see what's queued + jump to any item. */
+      queueView: queue.map((it) => ({ session: it.sessionId, text: it.text, kind: it.kind })),
+      /** Whether a cached replay is available for the current session. */
+      hasReplay: lastSessionId ? lastBySession.has(lastSessionId) : false,
       /** What a session actually gets: the configured palette or the backend's. */
       effectivePalette: config.voicePalette.length > 0 ? config.voicePalette : [...defaultPalette(config.backend, config.locale)],
       lastSessionId,
@@ -779,6 +784,16 @@ export function apply(ctx: Context, rawConfig: unknown): void {
    * human can step away to listen to something else, then continue hearing
    * the current line + the rest of the queue. */
   let paused = false;
+  /** The item currently being played (or null). Tracked so skip/jump/replay
+   * can decide what to do with the interrupted playback. */
+  let currentItem: QueueItem | null = null;
+  /** Signal the active utter() that playback was interrupted — 'pause' pushes
+   * the item back to the HEAD (replay on resume), 'skip' drops it, 'jump'
+   * pushes it to the TAIL (plays later). Set by the routes, read in utter. */
+  let interrupt: 'pause' | 'skip' | 'jump' | null = null;
+  /** Per-session cache of the last fully-played utterance (audio path + text +
+   * voice). "Replay current session" plays this without re-synthesizing. */
+  const lastBySession = new Map<string, { path: string; text: string; voice: string; at: number }>();
   /** Synthesis lane: at most one clip is synthesized at a time, but it runs
    * concurrently with the PLAYBACK worker. So while clip N plays, clip N+1 is
    * already synthesizing — the gap between spoken sentences drops from ~1.3s
@@ -918,11 +933,49 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     void pump();
   }
 
+  /** Check if the current playback was interrupted (pause/skip/jump). Returns
+   * true if utter should bail out — the item is re-queued or dropped depending
+   * on the interrupt type. Called after each playAndWait in utter(). */
+  const interrupted = (item: QueueItem): boolean => {
+    if (interrupt === 'skip') { interrupt = null; return true; }  // drop — don't re-queue
+    if (interrupt === 'jump') { interrupt = null; queue.push(item); return true; }  // push to tail — plays later
+    if (paused) { queue.unshift(item); return true; }  // pause — push to front, pump stops
+    return false;
+  };
+
+  /** Skip the current item: kill afplay, signal utter to drop it, pump → next. */
+  function skipCurrent(): void { interrupt = 'skip'; cancelPlayback(); void pump(); }
+  /** Jump to queue[to]: kill afplay, push the current to tail, move [to] to front. */
+  function jumpTo(to: number): void {
+    if (to < 0 || to >= queue.length) return;
+    interrupt = 'jump';
+    const target = queue.splice(to, 1)[0]!;
+    queue.unshift(target);
+    cancelPlayback();
+    void pump();
+  }
+  /** Replay a session's last fully-played utterance from the cache (one-off,
+   * doesn't touch the queue). If something's playing, it's killed first. */
+  async function replaySession(sid: string | undefined): Promise<boolean> {
+    if (!sid) sid = lastSessionId;
+    if (!sid || !lastBySession.has(sid)) return false;
+    cancelPlayback(); // kill current afplay if any
+    const cached = lastBySession.get(sid)!;
+    speaking = { kind: 'replay', text: cached.text, startedAt: Date.now(), voice: cached.voice };
+    try {
+      const config = current();
+      const backend = makeBackend(config.backend);
+      if (backend.id !== 'fake') await playAndWait(cached.path, { volumePct: config.volumePct });
+    } finally { speaking = null; }
+    return true;
+  }
+
   /** Await the (already-prefetched) clip → earcon → speech. Synthesis runs
    * ahead in the synth lane (see maybeSynth), so by the time playback of clip
    * N finishes, clip N+1 is usually already synthesized — no audible gap. */
   async function utter(item: QueueItem): Promise<void> {
     const config = current();
+    currentItem = item;
 
     // Chime-only items (少量 mode status notices): play the chime, skip
     // synthesis entirely. The chime IS the notification — no speech.
@@ -932,18 +985,16 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         const chime = await writeChimeFile(chimeSound, resolveAudioDir(config.audioDir));
         if (chime !== null) await playAndWait(chime, { timeoutMs: 2_000, volumePct: config.volumePct });
       }
-      if (paused) { queue.unshift(item); return; } // paused mid-chime → replay on resume
+      if (interrupted(item)) { currentItem = null; return; }
       recent.push({ at: Date.now(), kind: 'chime', text: '(提示音)', ms: 0, ok: true });
       if (recent.length > 30) recent.splice(0, recent.length - 30);
       ctx.logger.warn('dsh-voice-mini: spoke [chime] (no speech)');
+      currentItem = null;
       return;
     }
 
     const audioDir = resolveAudioDir(config.audioDir);
     const started = Date.now();
-    // Await the prefetched synthesis (or synthesize inline if prefetch hasn't
-    // started — e.g. the very first item). A rejection (both voices failed)
-    // propagates to pump()'s catch.
     const synth = await (item.synthPromise ?? prefetchSynth(item));
     const voiceLabel = synth.usedVoice.replace(/^zh-CN-|Neural$/g, '');
     state.lastVoice = voiceLabel;
@@ -953,24 +1004,25 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     speaking = { kind: item.kind, text: item.text, startedAt: started, voice: voiceLabel };
 
     try {
-      // ① earcon BEFORE speech — only for speech content (result/tool/test),
-      // NOT for status. The chime is a "speech is coming" cue; status items
-      // are short enough to speak directly without a chime prefix.
+      // ① earcon BEFORE speech — only for speech content (result/tool/test).
       if (item.chime && config.chimeEnabled && config.chimeSpeech !== 'none' && item.kind !== 'status') {
         const chime = await writeChimeFile(config.chimeSpeech, audioDir);
         if (chime !== null) await playAndWait(chime, { timeoutMs: 2_000, volumePct: config.volumePct });
       }
-      if (paused) { queue.unshift(item); return; } // paused during chime → replay on resume
+      if (interrupted(item)) return;
       // ② speech playback (loudness applied here — see playAndWait)
       const backend = makeBackend(config.backend);
       if (backend.id !== 'fake') await playAndWait(synth.path, { volumePct: config.volumePct });
-      if (paused) { queue.unshift(item); return; } // paused mid-speech → replay on resume
+      if (interrupted(item)) return;
 
       recent.push({ at: started, kind: item.kind, text: item.text, ms: synth.ms, ok: true });
       if (recent.length > 30) recent.splice(0, recent.length - 30);
       pushMetric({ at: started, kind: item.kind, sessionId: item.sessionId, ttsMs: synth.ms, totalMs: Date.now() - started, textLen: item.text.length, success: true });
+      // Per-session cache: store the last fully-played utterance for replay.
+      if (item.sessionId) lastBySession.set(item.sessionId, { path: synth.path, text: item.text, voice: voiceLabel, at: Date.now() });
       ctx.logger.warn(`dsh-voice-mini: spoke [${item.kind}] ${cap(item.text, 200)}`);
     } finally {
+      currentItem = null;
       speaking = null;
     }
   }
@@ -1412,6 +1464,23 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           if (url === '/resume' && req.method === 'POST') {
             resumePlayback();
             return sendJson(res, 200, { ok: true, paused });
+          }
+          // ── skip/jump/replay (queue navigation) ───────────────────────────────
+          if (url === '/skip' && req.method === 'POST') {
+            skipCurrent();
+            return sendJson(res, 200, { ok: true });
+          }
+          if (url === '/jump' && req.method === 'POST') {
+            const body = JSON.parse((await readBody(req)) || '{}');
+            const to = typeof body.to === 'number' ? body.to : Number(body.to);
+            if (Number.isFinite(to)) { jumpTo(Math.max(0, Math.floor(to))); return sendJson(res, 200, { ok: true }); }
+            return sendJson(res, 400, { ok: false, error: 'to must be a number' });
+          }
+          if (url === '/replay' && req.method === 'POST') {
+            const body = JSON.parse((await readBody(req)) || '{}');
+            const sid = typeof body.sessionId === 'string' ? body.sessionId : lastSessionId;
+            const ok = await replaySession(sid);
+            return sendJson(res, 200, { ok });
           }
           // ── metrics: per-call performance + token + system stats ────────────
           if (url === '/metrics' && req.method === 'GET') {

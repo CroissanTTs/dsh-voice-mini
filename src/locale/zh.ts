@@ -22,6 +22,7 @@ const zh: LocaleDict = {
     chime: '提示音',
     test: '试听',
     info: '信息',
+    queue: '队列',
     metrics: '监控',
   },
 
@@ -74,6 +75,8 @@ const zh: LocaleDict = {
     rerollVoice: '重新随机声音',
     pause: '暂停',
     resume: '继续',
+    skip: '跳过',
+    replay: '重播本会话',
     settingsHint: '持久设置在「设置 → dsh-voice-mini」分区',
     titleAttr: '语音反馈',
     header: '语音反馈',

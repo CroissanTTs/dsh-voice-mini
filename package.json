@@ -1,6 +1,6 @@
 {
   "name": "dsh-voice-mini",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Voice-feedback plugin for DeepSeek Harness: a speak tool, readReplies narration, an LLM verbalizer pass, per-session voices, chimes, a monitoring panel, and a native macOS floating pet. zh/en i18n.",
   "license": "MIT",
   "author": "zane",

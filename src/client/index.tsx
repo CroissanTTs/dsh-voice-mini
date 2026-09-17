@@ -26,6 +26,8 @@ interface State {
   phraseTurnEnd?: string;
   summarizeResult?: boolean; summarizeProvider?: string; summarizeModel?: string;
   queueLength?: number; pumping?: boolean; paused?: boolean; lastMs?: number; lastError?: string;
+  queueView?: Array<{ session?: string; text: string; kind: string }>;
+  hasReplay?: boolean;
   lastUrl?: string; lastVoice?: string; chimeUrls?: { speech: string; status: string } | null; recent?: SpokenRecord[];
   lastSessionId?: string; disabledSessions?: string[];
   /** Current session's assigned voice (label form) + whether it was re-rolled. */
@@ -533,6 +535,27 @@ function VoiceMiniAction(): React.ReactElement {
             </div>
 
             <div style={{ opacity: 0.3, fontSize: 11, marginTop: 4 }}>{t.actions.settingsHint}</div>
+
+            {/* ── 队列（可见 + 跳转 + 跳过 + 重播）──────────────────────── */}
+            <div style={cardLabel}>{t.cards.queue}</div>
+            <div style={card}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <button onClick={() => void fetch('/voice-mini/skip', { method: 'POST' }).then(() => void refresh()).catch(() => {})} style={{ flex: 1, padding: '5px 0', cursor: 'pointer', borderRadius: 7, border: `1px solid ${T.border}`, background: T.hover, color: 'inherit', fontSize: 12 }}>{t.actions.skip}</button>
+                <button onClick={() => void fetch('/voice-mini/replay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: state?.lastSessionId }) }).then(() => void refresh()).catch(() => {})} disabled={!state?.hasReplay} style={{ flex: 1, padding: '5px 0', cursor: state?.hasReplay ? 'pointer' : 'default', borderRadius: 7, border: `1px solid ${T.border}`, background: state?.hasReplay ? T.hover : 'transparent', color: 'inherit', fontSize: 12, opacity: state?.hasReplay ? 1 : 0.3 }}>{t.actions.replay}</button>
+              </div>
+              <div style={{ maxHeight: 120, overflow: 'auto', fontSize: 11, lineHeight: 1.6 }}>
+                {(state?.queueView ?? []).length === 0 ? (
+                  <div style={{ opacity: 0.3 }}>{t.info.noData}</div>
+                ) : (state?.queueView ?? []).map((q, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 6, padding: '1px 0', alignItems: 'center' }}>
+                    <button onClick={() => void fetch('/voice-mini/jump', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: i }) }).then(() => void refresh()).catch(() => {})} style={{ border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 0 }}>▶</button>
+                    <span style={{ opacity: 0.4, flexShrink: 0, width: 28 }}>{q.kind}</span>
+                    <span style={{ opacity: 0.4, flexShrink: 0 }}>{q.session?.slice(0, 6) ?? '—'}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* ── 监控 ────────────────────────────────────────── */}
             <div style={cardLabel}>{t.cards.metrics}</div>

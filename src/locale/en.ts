@@ -22,6 +22,7 @@ const en: LocaleDict = {
     chime: 'Chime',
     test: 'Test',
     info: 'Info',
+    queue: 'Queue',
     metrics: 'Monitor',
   },
 
@@ -74,6 +75,8 @@ const en: LocaleDict = {
     rerollVoice: 'Re-roll voice',
     pause: 'Pause',
     resume: 'Resume',
+    skip: 'Skip',
+    replay: 'Replay session',
     settingsHint: 'Persistent settings under "Settings → dsh-voice-mini"',
     titleAttr: 'Voice feedback',
     header: 'Voice feedback',
