@@ -47,6 +47,8 @@ export interface LocaleDict {
     provider: string;          // 服务商 / Provider
     providerHint: string;      // 填你的服务商路由名… / Enter your provider route name…
     providerPlaceholder: string; // 占位 / placeholder
+    providerAuto: string;      // 自动(取第一个) / Auto (first adapter)
+    refreshProviders: string;  // 刷新服务商列表 / Refresh provider list
     model: string;             // 模型 / Model
     refreshModels: string;     // 刷新模型列表 (title) / Refresh model list
     voiceAssign: string;       // 分配 / Assignment

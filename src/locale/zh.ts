@@ -41,6 +41,8 @@ const zh: LocaleDict = {
     provider: '服务商',
     providerHint: '填你的 LLM 服务商路由名，留空=自动取第一个',
     providerPlaceholder: '服务商路由名',
+    providerAuto: '自动（取第一个）',
+    refreshProviders: '刷新服务商列表',
     model: '模型',
     refreshModels: '刷新模型列表',
     voiceAssign: '分配',

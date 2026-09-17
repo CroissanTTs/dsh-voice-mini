@@ -41,6 +41,8 @@ const en: LocaleDict = {
     provider: 'Provider',
     providerHint: 'Enter your LLM provider route name; empty = auto-pick the first',
     providerPlaceholder: 'provider route name',
+    providerAuto: 'Auto (first adapter)',
+    refreshProviders: 'Refresh provider list',
     model: 'Model',
     refreshModels: 'Refresh model list',
     voiceAssign: 'Assignment',

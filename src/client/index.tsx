@@ -362,12 +362,26 @@ function VoiceMiniAction(): React.ReactElement {
                 {(state?.summarizeResult) && (
                   <>
                     <Row title={t.rows.provider}>
-                      <input
-                        value={state?.summarizeProvider ?? ''}
-                        onChange={(e) => void setConfig({ summarizeProvider: e.target.value })}
-                        placeholder={t.rows.providerPlaceholder}
-                        style={{ background: T.hover, color: 'inherit', borderRadius: 5, border: `1px solid ${T.border}`, padding: '3px 6px', fontSize: 11, width: 140, boxSizing: 'border-box' }}
-                      />
+                      <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <select
+                          value={state?.summarizeProvider ?? ''}
+                          onChange={(e) => void onProviderChange(e.target.value)}
+                          style={{ background: T.hover, color: 'inherit', borderRadius: 6, border: `1px solid ${T.border}`, padding: '4px 8px', fontSize: 12, cursor: 'pointer', minWidth: 120 }}
+                        >
+                          <option value="">{t.rows.providerAuto}</option>
+                          {providers.map((p) => <option key={p} value={p}>{p}</option>)}
+                          {state?.summarizeProvider && !providers.includes(state.summarizeProvider) && (
+                            <option value={state.summarizeProvider}>{state.summarizeProvider}</option>
+                          )}
+                        </select>
+                        <button
+                          onClick={() => void refreshProviders()}
+                          title={t.rows.refreshProviders}
+                          style={{ border: `1px solid ${T.border}`, background: T.hover, color: 'inherit', cursor: 'pointer', borderRadius: 5, padding: '4px 6px', fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 0 }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-9 9c-2.4 0-4.6-.9-6.3-2.5M3 12a9 9 0 0 1 9-9c2.4 0 4.6.9 6.3 2.5M21 3v6h-6M3 21v-6h6" /></svg>
+                        </button>
+                      </span>
                     </Row>
                     <div style={{ fontSize: 10, opacity: 0.35, marginBottom: 4 }}>{t.rows.providerHint}</div>
                     <Row title={t.rows.model}>
