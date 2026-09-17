@@ -25,7 +25,7 @@ interface State {
   announceTurnEnd: boolean; announceTodo: boolean; announceToolCall: boolean;
   phraseTurnEnd?: string;
   summarizeResult?: boolean; summarizeProvider?: string; summarizeModel?: string;
-  queueLength?: number; pumping?: boolean; lastMs?: number; lastError?: string;
+  queueLength?: number; pumping?: boolean; paused?: boolean; lastMs?: number; lastError?: string;
   lastUrl?: string; lastVoice?: string; chimeUrls?: { speech: string; status: string } | null; recent?: SpokenRecord[];
   lastSessionId?: string; disabledSessions?: string[];
   /** Current session's assigned voice (label form) + whether it was re-rolled. */
@@ -294,6 +294,12 @@ function VoiceMiniAction(): React.ReactElement {
                 <span style={{ fontWeight: 400, opacity: 0.35, fontSize: 11 }}>{state?.version ?? '…'}</span>
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {(state?.pumping || (state?.queueLength ?? 0) > 0) && (
+                  <button onClick={() => void fetch(`/voice-mini/${state?.paused ? 'resume' : 'pause'}`, { method: 'POST' }).then(() => void refresh()).catch(() => {})} style={{
+                    padding: '4px 10px', cursor: 'pointer', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                    border: `1px solid ${T.border}`, background: state?.paused ? ACCENT : T.hover, color: state?.paused ? '#fff' : 'inherit',
+                  }}>{state?.paused ? t.actions.resume : t.actions.pause}</button>
+                )}
                 {LOCALE_IDS.map((l) => (
                   <Pill key={l} active={normalizeLocale(state?.locale) === l} onClick={() => { try { localStorage.setItem('dsh-vm-locale', l); } catch { /* */ } void setConfig({ locale: l }); }}>{l.toUpperCase()}</Pill>
                 ))}

@@ -29,7 +29,7 @@ import { createReadStream, existsSync, readFileSync, statSync, writeFileSync, mk
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   freshAudioFile, makeBackend, playAndWait, resolveAudioDir, sessionVoiceFor, writeChimeFile,
-  chimeFileExt, defaultPalette, audioDurationSec, type TtsBackend,
+  chimeFileExt, defaultPalette, audioDurationSec, cancelPlayback, type TtsBackend,
 } from './tts.ts';
 import { authorized, isLoopback, loadOrCreateToken, writeRuntime } from './pet.ts';
 import { pickLocale, normalizeLocale, LOCALE_IDS, type LocaleId } from './locale/index.ts';
@@ -751,6 +751,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       ...config,
       queueLength: queue.length,
       pumping,
+      paused,
       recent: recent.slice(-15),
       /** What a session actually gets: the configured palette or the backend's. */
       effectivePalette: config.voicePalette.length > 0 ? config.voicePalette : [...defaultPalette(config.backend, config.locale)],
@@ -773,6 +774,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   // ── utterance queue (single worker → chime then speech, no overlaps) ──────
   const queue: QueueItem[] = [];
   let pumping = false;
+  /** Paused: the current afplay is killed, the interrupted item is pushed back
+   * to the head of the queue, and the worker stops until resume() — so the
+   * human can step away to listen to something else, then continue hearing
+   * the current line + the rest of the queue. */
+  let paused = false;
   /** Synthesis lane: at most one clip is synthesized at a time, but it runs
    * concurrently with the PLAYBACK worker. So while clip N plays, clip N+1 is
    * already synthesizing — the gap between spoken sentences drops from ~1.3s
@@ -842,7 +848,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
    * lane is free. Called on enqueue and on each synth completion so the lane
    * stays busy (pipelining) without fanning out concurrent requests. */
   function maybeSynth(): void {
-    if (synthInFlight >= 1) return;
+    if (paused || synthInFlight >= 1) return;
     const item = queue.find((it) => it.kind !== 'chime' && !it.synthStarted);
     if (!item) return;
     synthInFlight += 1;
@@ -877,7 +883,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     if (pumping) return;
     pumping = true;
     try {
-      while (queue.length > 0) {
+      while (queue.length > 0 && !paused) {
         const item = queue.shift()!;
         let ok = true;
         try {
@@ -887,11 +893,29 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           state.lastError = error instanceof Error ? error.message : String(error);
           ctx.logger.warn('dsh-voice-mini: utter failed', error);
         }
+        // If utter paused mid-playback it already pushed the item back onto the
+        // queue head; don't resolve it (it'll replay on resume) and stop the loop.
+        if (paused) break;
         item.resolve(ok);
       }
     } finally {
       pumping = false;
     }
+  }
+
+  /** Pause: kill the current afplay; the worker re-queues the interrupted
+   * item and stops. The queue (incl. the current line) is preserved for resume. */
+  function pausePlayback(): void {
+    if (paused) return;
+    paused = true;
+    cancelPlayback(); // resolves the active playAndWait early → utter re-queues
+  }
+  /** Resume: clear the flag and let the worker replay the interrupted item +
+   * drain the rest of the queue. */
+  function resumePlayback(): void {
+    if (!paused) return;
+    paused = false;
+    void pump();
   }
 
   /** Await the (already-prefetched) clip → earcon → speech. Synthesis runs
@@ -908,6 +932,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         const chime = await writeChimeFile(chimeSound, resolveAudioDir(config.audioDir));
         if (chime !== null) await playAndWait(chime, { timeoutMs: 2_000, volumePct: config.volumePct });
       }
+      if (paused) { queue.unshift(item); return; } // paused mid-chime → replay on resume
       recent.push({ at: Date.now(), kind: 'chime', text: '(提示音)', ms: 0, ok: true });
       if (recent.length > 30) recent.splice(0, recent.length - 30);
       ctx.logger.warn('dsh-voice-mini: spoke [chime] (no speech)');
@@ -935,9 +960,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         const chime = await writeChimeFile(config.chimeSpeech, audioDir);
         if (chime !== null) await playAndWait(chime, { timeoutMs: 2_000, volumePct: config.volumePct });
       }
+      if (paused) { queue.unshift(item); return; } // paused during chime → replay on resume
       // ② speech playback (loudness applied here — see playAndWait)
       const backend = makeBackend(config.backend);
       if (backend.id !== 'fake') await playAndWait(synth.path, { volumePct: config.volumePct });
+      if (paused) { queue.unshift(item); return; } // paused mid-speech → replay on resume
 
       recent.push({ at: started, kind: item.kind, text: item.text, ms: synth.ms, ok: true });
       if (recent.length > 30) recent.splice(0, recent.length - 30);
@@ -1373,6 +1400,18 @@ export function apply(ctx: Context, rawConfig: unknown): void {
             recent.length = 0;
             metrics.length = 0;
             return sendJson(res, 200, { ok: true });
+          }
+          // ── pause/resume the playback worker ──────────────────────────────────
+          // Pause kills the current afplay + parks the worker (the interrupted
+          // item is re-queued for replay); resume drains the queue again. The
+          // queue is never cleared, so nothing in it is lost across a pause.
+          if (url === '/pause' && req.method === 'POST') {
+            pausePlayback();
+            return sendJson(res, 200, { ok: true, paused });
+          }
+          if (url === '/resume' && req.method === 'POST') {
+            resumePlayback();
+            return sendJson(res, 200, { ok: true, paused });
           }
           // ── metrics: per-call performance + token + system stats ────────────
           if (url === '/metrics' && req.method === 'GET') {

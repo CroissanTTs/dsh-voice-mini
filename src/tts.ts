@@ -276,6 +276,19 @@ export function play(file: string): void {
   p.unref();
 }
 
+/** The afplay process currently playing (if any), so a pause can kill it. */
+let currentPlayProc: ReturnType<typeof spawn> | null = null;
+
+/**
+ * Kill the currently-playing afplay (used by pause). Returns whether anything
+ * was playing. The killed playAndWait resolves early (its `close` handler).
+ */
+export function cancelPlayback(): boolean {
+  const p = currentPlayProc;
+  if (p !== null) { try { p.kill(); } catch { /* */ } return true; }
+  return false;
+}
+
 /**
  * Play a file and resolve when playback finishes (macOS `afplay` exits with
  * the sound). On other platforms this resolves immediately. A hard timeout
@@ -297,12 +310,13 @@ export function playAndWait(
   const args = factor === 1 ? [file] : ['-v', factor.toFixed(2), file];
   return new Promise((resolvePromise) => {
     let settled = false;
-    const done = () => { if (!settled) { settled = true; clearTimeout(timer); resolvePromise(); } };
+    const done = () => { if (!settled) { settled = true; clearTimeout(timer); if (currentPlayProc === p) currentPlayProc = null; resolvePromise(); } };
     const timer = setTimeout(() => {
       // Playback outran the cap — leave it running, free the queue.
       done();
     }, timeoutMs);
     const p = spawn('afplay', args, { stdio: 'ignore' });
+    currentPlayProc = p;
     p.on('error', done);
     p.on('close', done);
   });

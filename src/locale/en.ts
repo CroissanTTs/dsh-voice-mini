@@ -72,6 +72,8 @@ const en: LocaleDict = {
     refreshMetrics: 'Refresh monitor',
     resetPalette: 'Reset to default',
     rerollVoice: 'Re-roll voice',
+    pause: 'Pause',
+    resume: 'Resume',
     settingsHint: 'Persistent settings under "Settings → dsh-voice-mini"',
     titleAttr: 'Voice feedback',
     header: 'Voice feedback',

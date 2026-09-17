@@ -79,6 +79,8 @@ export interface LocaleDict {
     refreshMetrics: string;   // 刷新监控 / Refresh monitor
     resetPalette: string;     // 恢复默认 / Reset to default
     rerollVoice: string;      // 重新随机声音 / Re-roll voice
+    pause: string;            // 暂停 / Pause
+    resume: string;           // 继续 / Resume
     settingsHint: string;     // 持久设置在「设置 → dsh-voice-mini」分区 / Persistent settings under "Settings → dsh-voice-mini"
     titleAttr: string;        // 语音反馈 (button title) / Voice feedback
     header: string;           // 语音反馈 / Voice feedback
