@@ -24,6 +24,7 @@ const zh: LocaleDict = {
     info: '信息',
     queue: '队列',
     metrics: '监控',
+    jarvis: 'Jarvis 助理',
   },
 
   rows: {
@@ -61,6 +62,16 @@ const zh: LocaleDict = {
     chimeStatus: '状态前（播报通知）',
     phrasePlaceholder: '工作区 {title} 下的会话已完成',
     phraseHint: '{title} = 工作区目录名',
+    // Jarvis 联动
+    jarvisLinked: '启用 Jarvis 联动',
+    jarvisLinkedHint: '检测到 dsh-harness-jarvis 时自动激活；也可手动开启预览面板',
+    jarvisVoice: 'Jarvis 专属声音',
+    jarvisVoiceHint: '留空 = 用默认音色；Jarvis 用这个声音做自己的播报（独立于各会话音色）',
+    jarvisSpeechMode: 'Jarvis 播报模式',
+    jarvisVoicemail: '语音信箱',
+    jarvisVoicemailHint: '口播内容进信箱（悬浮窗显示未读），用户点击后播放',
+    jarvisPersona: 'Jarvis 人设',
+    jarvisPersonaPlaceholder: '统一助理人格 prompt，跨会话一致（如：你是用户的私人助理贾维斯…）',
   },
 
   actions: {
@@ -77,6 +88,9 @@ const zh: LocaleDict = {
     resume: '继续',
     skip: '跳过',
     replay: '重播本会话',
+    jarvisAlways: '总是播报',
+    jarvisNormal: '正常',
+    jarvisQuiet: '安静',
     settingsHint: '持久设置在「设置 → dsh-voice-mini」分区',
     titleAttr: '语音反馈',
     header: '语音反馈',

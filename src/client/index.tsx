@@ -28,6 +28,9 @@ interface State {
   queueLength?: number; pumping?: boolean; paused?: boolean; lastMs?: number; lastError?: string;
   queueView?: Array<{ session?: string; text: string; kind: string }>;
   hasReplay?: boolean;
+  // Jarvis 联动
+  jarvisLinked?: boolean; jarvisVoice?: string; jarvisSpeechMode?: string;
+  jarvisVoicemail?: boolean; jarvisPersona?: string;
   lastUrl?: string; lastVoice?: string; chimeUrls?: { speech: string; status: string } | null; recent?: SpokenRecord[];
   lastSessionId?: string; disabledSessions?: string[];
   /** Current session's assigned voice (label form) + whether it was re-rolled. */
@@ -555,6 +558,35 @@ function VoiceMiniAction(): React.ReactElement {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* ── Jarvis 助理（联动检测后激活）────────────────────────── */}
+            <div style={cardLabel}>{t.cards.jarvis}</div>
+            <div style={card}>
+              <Row title={t.rows.jarvisLinked}>
+                <Toggle checked={state?.jarvisLinked ?? false} onChange={(v) => void setConfig({ jarvisLinked: v })} />
+              </Row>
+              <div style={{ fontSize: 10, opacity: 0.35 }}>{t.rows.jarvisLinkedHint}</div>
+              {state?.jarvisLinked && (
+                <>
+                  <div style={{ height: 10 }} />
+                  <Row title={t.rows.jarvisVoice}>
+                    <input value={state?.jarvisVoice ?? ''} onChange={(e) => void setConfig({ jarvisVoice: e.target.value })} placeholder={t.rows.jarvisVoiceHint} style={{ background: T.hover, color: 'inherit', borderRadius: 5, border: `1px solid ${T.border}`, padding: '3px 6px', fontSize: 11, width: 160, boxSizing: 'border-box' }} />
+                  </Row>
+                  <Row title={t.rows.jarvisSpeechMode}>
+                    <span style={{ display: 'flex', gap: 4 }}>
+                      <Pill active={(state?.jarvisSpeechMode ?? 'normal') === 'always'} onClick={() => void setConfig({ jarvisSpeechMode: 'always' })}>{t.actions.jarvisAlways}</Pill>
+                      <Pill active={(state?.jarvisSpeechMode ?? 'normal') === 'normal'} onClick={() => void setConfig({ jarvisSpeechMode: 'normal' })}>{t.actions.jarvisNormal}</Pill>
+                      <Pill active={(state?.jarvisSpeechMode ?? 'normal') === 'quiet'} onClick={() => void setConfig({ jarvisSpeechMode: 'quiet' })}>{t.actions.jarvisQuiet}</Pill>
+                    </span>
+                  </Row>
+                  <Row title={t.rows.jarvisVoicemail}><Toggle checked={state?.jarvisVoicemail ?? false} onChange={(v) => void setConfig({ jarvisVoicemail: v })} /></Row>
+                  <div style={{ fontSize: 10, opacity: 0.35 }}>{t.rows.jarvisVoicemailHint}</div>
+                  <div style={{ height: 6 }} />
+                  <div style={cardLabel}>{t.rows.jarvisPersona}</div>
+                  <textarea value={state?.jarvisPersona ?? ''} onChange={(e) => void setConfig({ jarvisPersona: e.target.value })} placeholder={t.rows.jarvisPersonaPlaceholder} rows={3} style={{ width: '100%', boxSizing: 'border-box', background: T.hover, color: 'inherit', borderRadius: 6, border: `1px solid ${T.border}`, padding: '6px 8px', fontSize: 11, fontFamily: 'inherit', resize: 'vertical' }} />
+                </>
+              )}
             </div>
 
             {/* ── 监控 ────────────────────────────────────────── */}

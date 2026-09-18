@@ -29,6 +29,7 @@ export interface LocaleDict {
     info: string;       // 信息 / Info
     queue: string;      // 队列 / Queue
     metrics: string;    // 监控 / Monitor
+    jarvis: string;     // Jarvis 助理 / Jarvis Assistant
   };
 
   /** Row titles + small inline hints. */
@@ -67,6 +68,16 @@ export interface LocaleDict {
     chimeStatus: string;       // 状态前（播报通知） / Before status (notice)
     phrasePlaceholder: string; // 工作区 {title} 下的会话已完成 / Workspace {title} session done
     phraseHint: string;        // {title} = 工作区目录名 / {title} = workspace directory name
+    // ── Jarvis 联动 ──
+    jarvisLinked: string;     // 启用联动 / Enable linkage
+    jarvisLinkedHint: string; // 检测到 jarvis 插件自动激活… / Auto-activated when jarvis is detected…
+    jarvisVoice: string;      // 专属声音 / Dedicated voice
+    jarvisVoiceHint: string;  // 留空=用默认音色… / Empty = default voice…
+    jarvisSpeechMode: string; // 播报模式 / Speech mode
+    jarvisVoicemail: string;  // 语音信箱 / Voicemail
+    jarvisVoicemailHint: string; // 口播内容进信箱… / Utterances park in inbox…
+    jarvisPersona: string;    // 人设 / Persona
+    jarvisPersonaPlaceholder: string; // 统一助理人格 prompt… / Unified assistant persona…
   };
 
   /** Buttons + standalone action text. */
@@ -84,6 +95,9 @@ export interface LocaleDict {
     resume: string;           // 继续 / Resume
     skip: string;             // 跳过 / Skip
     replay: string;           // 重播本会话 / Replay session
+    jarvisAlways: string;     // 总是播报 / Always
+    jarvisNormal: string;     // 正常 / Normal
+    jarvisQuiet: string;      // 安静 / Quiet
     settingsHint: string;     // 持久设置在「设置 → dsh-voice-mini」分区 / Persistent settings under "Settings → dsh-voice-mini"
     titleAttr: string;        // 语音反馈 (button title) / Voice feedback
     header: string;           // 语音反馈 / Voice feedback

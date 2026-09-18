@@ -24,6 +24,7 @@ const en: LocaleDict = {
     info: 'Info',
     queue: 'Queue',
     metrics: 'Monitor',
+    jarvis: 'Jarvis Assistant',
   },
 
   rows: {
@@ -61,6 +62,16 @@ const en: LocaleDict = {
     chimeStatus: 'Before status (notice)',
     phrasePlaceholder: 'Workspace {title} session done',
     phraseHint: '{title} = workspace directory name',
+    // Jarvis linkage
+    jarvisLinked: 'Enable Jarvis linkage',
+    jarvisLinkedHint: 'Auto-activated when dsh-harness-jarvis is detected; can also be toggled manually to preview the panel',
+    jarvisVoice: 'Jarvis dedicated voice',
+    jarvisVoiceHint: 'Empty = default voice; Jarvis uses this for its own announcements (separate from per-session voices)',
+    jarvisSpeechMode: 'Jarvis speech mode',
+    jarvisVoicemail: 'Voicemail',
+    jarvisVoicemailHint: 'Utterances park in an inbox (unread badge on the floating widget); user clicks to play',
+    jarvisPersona: 'Jarvis persona',
+    jarvisPersonaPlaceholder: 'Unified assistant persona prompt, consistent across sessions (e.g.: You are the user\'s personal assistant Jarvis…)',
   },
 
   actions: {
@@ -77,6 +88,9 @@ const en: LocaleDict = {
     resume: 'Resume',
     skip: 'Skip',
     replay: 'Replay session',
+    jarvisAlways: 'Always',
+    jarvisNormal: 'Normal',
+    jarvisQuiet: 'Quiet',
     settingsHint: 'Persistent settings under "Settings → dsh-voice-mini"',
     titleAttr: 'Voice feedback',
     header: 'Voice feedback',
