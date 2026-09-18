@@ -76,8 +76,6 @@ export interface LocaleDict {
     jarvisSpeechMode: string; // 播报模式 / Speech mode
     jarvisVoicemail: string;  // 语音信箱 / Voicemail
     jarvisVoicemailHint: string; // 口播内容进信箱… / Utterances park in inbox…
-    jarvisPersona: string;    // 人设 / Persona
-    jarvisPersonaPlaceholder: string; // 统一助理人格 prompt… / Unified assistant persona…
   };
 
   /** Buttons + standalone action text. */

@@ -94,8 +94,6 @@ export const Config = z.object({
   // Voicemail mode: queued utterances park in an inbox (unread badge) instead
   // of playing immediately.
   jarvisVoicemail: z.boolean().default(false),
-  // The Jarvis persona prompt — a unified personality across all sessions.
-  jarvisPersona: z.string().default(''),
 });
 
 interface MiniConfig {
@@ -132,7 +130,6 @@ interface MiniConfig {
   jarvisVoice: string;
   jarvisSpeechMode: string;
   jarvisVoicemail: boolean;
-  jarvisPersona: string;
 }
 
 /**
@@ -773,7 +770,6 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     if (typeof body?.jarvisVoice === 'string') patch.jarvisVoice = body.jarvisVoice.slice(0, 100);
     if (typeof body?.jarvisSpeechMode === 'string' && ['always', 'normal', 'quiet'].includes(body.jarvisSpeechMode)) patch.jarvisSpeechMode = body.jarvisSpeechMode;
     if (typeof body?.jarvisVoicemail === 'boolean') patch.jarvisVoicemail = body.jarvisVoicemail;
-    if (typeof body?.jarvisPersona === 'string') patch.jarvisPersona = body.jarvisPersona.slice(0, 2000);
     return patch;
   };
   /** The single JSON shape both the modal and the native pet consume. */

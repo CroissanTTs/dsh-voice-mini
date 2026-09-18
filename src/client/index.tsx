@@ -30,7 +30,7 @@ interface State {
   hasReplay?: boolean;
   // Jarvis 联动
   jarvisLinked?: boolean; jarvisVoice?: string; jarvisSpeechMode?: string;
-  jarvisVoicemail?: boolean; jarvisPersona?: string;
+  jarvisVoicemail?: boolean;
   effectiveJarvisVoice?: string;
   lastUrl?: string; lastVoice?: string; chimeUrls?: { speech: string; status: string } | null; recent?: SpokenRecord[];
   lastSessionId?: string; disabledSessions?: string[];
@@ -596,9 +596,6 @@ function VoiceMiniAction(): React.ReactElement {
                   </Row>
                   <Row title={t.rows.jarvisVoicemail}><Toggle checked={state?.jarvisVoicemail ?? false} onChange={(v) => void setConfig({ jarvisVoicemail: v })} /></Row>
                   <div style={{ fontSize: 10, opacity: 0.35 }}>{t.rows.jarvisVoicemailHint}</div>
-                  <div style={{ height: 6 }} />
-                  <div style={cardLabel}>{t.rows.jarvisPersona}</div>
-                  <textarea value={state?.jarvisPersona ?? ''} onChange={(e) => void setConfig({ jarvisPersona: e.target.value })} placeholder={t.rows.jarvisPersonaPlaceholder} rows={3} style={{ width: '100%', boxSizing: 'border-box', background: T.hover, color: 'inherit', borderRadius: 6, border: `1px solid ${T.border}`, padding: '6px 8px', fontSize: 11, fontFamily: 'inherit', resize: 'vertical' }} />
                 </>
               )}
             </div>

@@ -70,8 +70,6 @@ const zh: LocaleDict = {
     jarvisSpeechMode: 'Jarvis 播报模式',
     jarvisVoicemail: '语音信箱',
     jarvisVoicemailHint: '口播内容进信箱（悬浮窗显示未读），用户点击后播放',
-    jarvisPersona: 'Jarvis 人设',
-    jarvisPersonaPlaceholder: '统一助理人格 prompt，跨会话一致（如：你是用户的私人助理贾维斯…）',
   },
 
   actions: {

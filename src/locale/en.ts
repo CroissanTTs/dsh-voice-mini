@@ -70,8 +70,6 @@ const en: LocaleDict = {
     jarvisSpeechMode: 'Jarvis speech mode',
     jarvisVoicemail: 'Voicemail',
     jarvisVoicemailHint: 'Utterances park in an inbox (unread badge on the floating widget); user clicks to play',
-    jarvisPersona: 'Jarvis persona',
-    jarvisPersonaPlaceholder: 'Unified assistant persona prompt, consistent across sessions (e.g.: You are the user\'s personal assistant Jarvis…)',
   },
 
   actions: {
