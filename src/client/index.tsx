@@ -31,6 +31,7 @@ interface State {
   // Jarvis 联动
   jarvisLinked?: boolean; jarvisVoice?: string; jarvisSpeechMode?: string;
   jarvisVoicemail?: boolean; jarvisPersona?: string;
+  effectiveJarvisVoice?: string;
   lastUrl?: string; lastVoice?: string; chimeUrls?: { speech: string; status: string } | null; recent?: SpokenRecord[];
   lastSessionId?: string; disabledSessions?: string[];
   /** Current session's assigned voice (label form) + whether it was re-rolled. */
@@ -54,6 +55,11 @@ const VOICES: Record<string, string[]> = {
   fake: [],
 };
 
+/** Verified distinctive voices for the Jarvis assistant — British male (formal,
+ * Jarvis-like) for English, deep male for Chinese. All tested to synthesize
+ * correctly and handle version numbers (3.0.8 → "three point…" / "三 点 零 点 八"). */
+const JARVIS_VOICES = ['en-GB-ThomasNeural', 'en-GB-RyanNeural', 'zh-CN-YunjianNeural'];
+
 const fmtTime = (ms: number): string => {
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
@@ -63,6 +69,7 @@ const label = (s: string): string => {
   const m: Record<string, string> = {
     'zh-CN-XiaoxiaoNeural': '晓晓', 'zh-CN-YunyangNeural': '云扬', 'zh-CN-YunjianNeural': '云健',
     'zh-CN-XiaoyiNeural': '晓伊', 'en-US-AriaNeural': 'Aria', 'en-US-AnneNeural': 'Anne', 'en-US-ChristopherNeural': 'Christopher', 'en-US-BrandonNeural': 'Brandon',
+    'en-GB-ThomasNeural': 'Thomas (英式)', 'en-GB-RyanNeural': 'Ryan (英式)',
     af_heart: 'Heart', af_alloy: 'Alloy', bm_fable: 'Fable', am_adam: 'Adam',
     Tingting: '婷婷', Sinji: 'Sinji', Meijia: '美佳', Samantha: 'Samantha',
     glass: 'Glass', ding: '叮', ping: 'Ping', soft: '柔', none: '无',
@@ -571,8 +578,15 @@ function VoiceMiniAction(): React.ReactElement {
                 <>
                   <div style={{ height: 10 }} />
                   <Row title={t.rows.jarvisVoice}>
-                    <input value={state?.jarvisVoice ?? ''} onChange={(e) => void setConfig({ jarvisVoice: e.target.value })} placeholder={t.rows.jarvisVoiceHint} style={{ background: T.hover, color: 'inherit', borderRadius: 5, border: `1px solid ${T.border}`, padding: '3px 6px', fontSize: 11, width: 160, boxSizing: 'border-box' }} />
+                    <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <select value={state?.jarvisVoice ?? ''} onChange={(e) => void setConfig({ jarvisVoice: e.target.value })} style={{ background: T.hover, color: 'inherit', borderRadius: 6, border: `1px solid ${T.border}`, padding: '4px 8px', fontSize: 12, cursor: 'pointer', minWidth: 120 }}>
+                        <option value="">{t.rows.providerAuto}</option>
+                        {JARVIS_VOICES.map((v) => <option key={v} value={v}>{label(v)}</option>)}
+                      </select>
+                      <span style={{ fontSize: 10, opacity: 0.4 }}>{label(state?.effectiveJarvisVoice ?? '')}</span>
+                    </span>
                   </Row>
+                  <div style={{ fontSize: 10, opacity: 0.35, marginBottom: 4 }}>{t.rows.jarvisVoiceHint}</div>
                   <Row title={t.rows.jarvisSpeechMode}>
                     <span style={{ display: 'flex', gap: 4 }}>
                       <Pill active={(state?.jarvisSpeechMode ?? 'normal') === 'always'} onClick={() => void setConfig({ jarvisSpeechMode: 'always' })}>{t.actions.jarvisAlways}</Pill>
