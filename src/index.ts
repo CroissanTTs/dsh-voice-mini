@@ -226,6 +226,12 @@ interface QueueItem {
   chime: boolean;
   /** Owning conversation — decides which voice this line is spoken in. */
   sessionId?: string;
+  /** When true, this utterance uses the dedicated Jarvis voice
+   * (effectiveJarvisVoice: en→en-GB-ThomasNeural, zh→zh-CN-YunjianNeural, or
+   * config.jarvisVoice if set) with no per-session jitter — so the cross-session
+   * assistant sounds the same across all conversations. Set on Jarvis's own
+   * announcements, not on ordinary per-session speech. */
+  jarvis?: boolean;
   resolve: (ok: boolean) => void;
   /** Prefetched synthesis result (started on enqueue, max 1 in flight so it
    * pipelines behind playback rather than fanning out concurrent requests). */
@@ -840,13 +846,18 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     const config = current();
     const backend = makeBackend(config.backend);
     const audioDir = resolveAudioDir(config.audioDir);
-    // A re-rolled voice (per-session override) beats the deterministic hash;
-    // otherwise the hash keeps the same session sounding the same across restarts.
-    const choice = (item.sessionId && voiceOverride.has(item.sessionId)
-      ? voiceOverride.get(item.sessionId)!
-      : sessionVoiceFor(item.sessionId, {
-        mode: config.voiceMode, voice: config.voice, palette: config.voicePalette, backend: config.backend, locale: config.locale,
-      }));
+    // Jarvis-marked utterances use the dedicated male voice
+    // (effectiveJarvisVoice: en→en-GB-ThomasNeural, zh→zh-CN-YunjianNeural,
+    // or config.jarvisVoice if set) with NO per-session jitter, so the
+    // cross-session assistant sounds the same across all conversations.
+    // Everything else keeps the per-session hash (or a re-rolled override).
+    const choice = item.jarvis
+      ? { voice: config.jarvisVoice || (config.locale === 'en' ? 'en-GB-ThomasNeural' : 'zh-CN-YunjianNeural'), rateJitter: 0 }
+      : (item.sessionId && voiceOverride.has(item.sessionId)
+        ? voiceOverride.get(item.sessionId)!
+        : sessionVoiceFor(item.sessionId, {
+          mode: config.voiceMode, voice: config.voice, palette: config.voicePalette, backend: config.backend, locale: config.locale,
+        }));
     const attempt = async (voice: string): Promise<{ path: string; ms: number }> => {
       const file = await freshAudioFile(audioDir, extForBackend(backend.id));
       const result = await backend.synthesize(item.text, file, voice, {
@@ -908,7 +919,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     p.finally(() => { synthInFlight -= 1; maybeSynth(); });
   }
 
-  function enqueue(kind: QueueItem['kind'], text: string, sessionId?: string): Promise<boolean> {
+  function enqueue(kind: QueueItem['kind'], text: string, sessionId?: string, jarvis?: boolean): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       // Earcon rings once per burst: only when the queue was idle (empty AND
       // not pumping) does this item start a new burst and carry the chime.
@@ -920,7 +931,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         if (idx === -1) break;
         queue.splice(idx, 1)[0].resolve(false);
       }
-      queue.push({ kind, text, chime: startsBurst, sessionId, resolve });
+      queue.push({ kind, text, chime: startsBurst, sessionId, jarvis, resolve });
       if (kind !== 'chime') maybeSynth(); // start synthesis ahead of playback
       void pump();
     });
@@ -1457,9 +1468,10 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           if (url === '/test' && req.method === 'POST') {
             const body = JSON.parse((await readBody(req)) || '{}');
             const text = typeof body.text === 'string' && body.text.trim() !== '' ? body.text : pickLocale(current().locale).spoken.testDefault;
-            const ok = await enqueue('test', text);
+            const jarvis = body.jarvis === true;
+            const ok = await enqueue('test', text, undefined, jarvis);
             if (!ok) return sendJson(res, 500, { error: state.lastError ?? 'synthesis failed' });
-            return sendJson(res, 200, { ok: true, ms: state.lastMs, url: state.lastUrl });
+            return sendJson(res, 200, { ok: true, ms: state.lastMs, url: state.lastUrl, jarvis });
           }
           // ── re-roll this session's voice ──────────────────────────────────────
           // Pick a fresh random voice (≠ the current one) from the effective
