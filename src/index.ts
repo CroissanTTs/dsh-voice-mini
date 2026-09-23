@@ -217,6 +217,16 @@ const STATUS_KEYS: ReadonlyArray<keyof MiniConfig> = [
  * `synthPromise` prefetches synthesis so the next clip is ready before the
  * current one finishes playing — that pipelining is what makes streaming TTS
  * sound continuous instead of "segment, gap, segment". */
+/** Sent to dsh-harness-jarvis's `jarvis.speech()` around every spoken line.
+ * `source` is 'jarvis' for Jarvis's own voice (its announcements and its
+ * session's replies), 'session' for narration of any other conversation. */
+interface SpeechSignal {
+  phase: 'start' | 'end';
+  id: string;
+  source: 'jarvis' | 'session';
+  sessionId?: string;
+}
+
 interface QueueItem {
   kind: 'result' | 'status' | 'tool' | 'test' | 'chime';
   text: string;
@@ -1013,6 +1023,27 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     return false;
   };
 
+  /** The 'jarvis' service when dsh-harness-jarvis is loaded. Every spoken line
+   * is reported to it (start + end) so the Jarvis orb animates in step with the
+   * audio, tinted by who is talking. */
+  let jarvisService: { sessionId?: string; speech?: (signal: SpeechSignal) => void } | undefined;
+  let speechSeq = 0;
+
+  /** Reports one utterance to Jarvis; returns the matching end reporter. */
+  function reportSpeech(item: { jarvis?: boolean; sessionId?: string }): () => void {
+    const svc = jarvisService;
+    if (typeof svc?.speech !== 'function') return () => {};
+    const id = `vm-${Date.now().toString(36)}-${(speechSeq += 1)}`;
+    const source: SpeechSignal['source'] =
+      item.jarvis === true || (item.sessionId !== undefined && item.sessionId === svc.sessionId) ? 'jarvis' : 'session';
+    const send = (phase: SpeechSignal['phase']) => {
+      try { svc.speech!({ phase, id, source, ...(item.sessionId ? { sessionId: item.sessionId } : {}) }); } catch { /* Jarvis must never break playback */ }
+    };
+    send('start');
+    let ended = false;
+    return () => { if (!ended) { ended = true; send('end'); } };
+  }
+
   /** Skip the current item: kill afplay, signal utter to drop it, pump → next. */
   function skipCurrent(): void { interrupt = 'skip'; cancelPlayback(); void pump(); }
   /** Clear: drop everything queued, stop the current line, and leave the
@@ -1041,11 +1072,12 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     cancelPlayback(); // kill current afplay if any
     const cached = lastBySession.get(sid)!;
     speaking = { kind: 'replay', text: cached.text, startedAt: Date.now(), voice: cached.voice };
+    const endSpeech = reportSpeech({ sessionId: sid });
     try {
       const config = current();
       const backend = makeBackend(config.backend);
       if (backend.id !== 'fake') await playAndWait(cached.path, { volumePct: config.volumePct });
-    } finally { speaking = null; }
+    } finally { speaking = null; endSpeech(); }
     return true;
   }
 
@@ -1081,6 +1113,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     state.lastError = undefined;
     state.lastUrl = `/voice-mini/audio/${basename(synth.path)}`;
     speaking = { kind: item.kind, text: item.text, startedAt: started, voice: voiceLabel };
+    const endSpeech = reportSpeech(item);
 
     try {
       // ① earcon BEFORE speech — only for speech content (result/tool/test).
@@ -1103,6 +1136,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     } finally {
       currentItem = null;
       speaking = null;
+      endSpeech();
     }
   }
 
@@ -1110,8 +1144,10 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   // If dsh-harness-jarvis is installed and provides a 'jarvis' service, auto-
   // link: flip jarvisLinked so the Jarvis panel section appears. The user can
   // also toggle it manually (for previewing before jarvis is built).
-  ctx.inject(['jarvis' as any], () => {
+  ctx.inject(['jarvis' as any], (jarvisCtx) => {
     applyOverride({ jarvisLinked: true });
+    jarvisService = (jarvisCtx as any).get?.('jarvis');
+    (jarvisCtx as any).effect?.(() => () => { jarvisService = undefined; });
     ctx.logger.warn('dsh-voice-mini: Jarvis service detected — Jarvis panel activated');
   });
 
