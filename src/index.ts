@@ -1015,6 +1015,15 @@ export function apply(ctx: Context, rawConfig: unknown): void {
 
   /** Skip the current item: kill afplay, signal utter to drop it, pump → next. */
   function skipCurrent(): void { interrupt = 'skip'; cancelPlayback(); void pump(); }
+  /** Clear: drop everything queued, stop the current line, and leave the
+   * worker unpaused so the next utterance plays normally. */
+  function clearQueue(): number {
+    const dropped = queue.splice(0, queue.length);
+    for (const it of dropped) it.resolve(false);
+    paused = false;
+    if (currentItem !== null) { interrupt = 'skip'; cancelPlayback(); }
+    return dropped.length;
+  }
   /** Jump to queue[to]: kill afplay, push the current to tail, move [to] to front. */
   function jumpTo(to: number): void {
     if (to < 0 || to >= queue.length) return;
@@ -1424,6 +1433,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
                 speaking: speaking !== null,
                 current: speaking,
                 queued: queue.length,
+                paused,
                 attention: attention?.kind ?? null,
                 attentionText: attention?.text ?? '',
                 last,
@@ -1549,6 +1559,9 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           if (url === '/skip' && req.method === 'POST') {
             skipCurrent();
             return sendJson(res, 200, { ok: true });
+          }
+          if (url === '/queue/clear' && req.method === 'POST') {
+            return sendJson(res, 200, { ok: true, dropped: clearQueue() });
           }
           if (url === '/jump' && req.method === 'POST') {
             const body = JSON.parse((await readBody(req)) || '{}');
