@@ -1026,7 +1026,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   /** The 'jarvis' service when dsh-harness-jarvis is loaded. Every spoken line
    * is reported to it (start + end) so the Jarvis orb animates in step with the
    * audio, tinted by who is talking. */
-  let jarvisService: { sessionId?: string; speech?: (signal: SpeechSignal) => void } | undefined;
+  let jarvisService: { sessionId?: string; speech?: (signal: SpeechSignal) => void; claimsTurnEnd?: (sessionId: string) => boolean } | undefined;
   let speechSeq = 0;
 
   /** Reports one utterance to Jarvis; returns the matching end reporter. */
@@ -1314,6 +1314,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         return;
       }
       case 'turn/end': {
+        // Jarvis owns this terminal announcement; skip both verbalizer and
+        // fallback speech. Older or unavailable services keep the usual path.
+        try {
+          if (sid && jarvisService?.claimsTurnEnd?.(sid) === true) return;
+        } catch { /* Jarvis must never break the fallback announcement. */ }
         // Already heard this turn: either the model spoke in its own voice, or
         // 逐字朗读 read the reply out. The template would just repeat it.
         if (spokeThisTurn || config.readReplies) return;
