@@ -465,16 +465,28 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   let speaking: { kind: string; text: string; startedAt: number; voice: string } | null = null;
   /** Something the human should act on (approval / question) — pet looks alert. */
   let attention: { kind: 'approval' | 'question'; text: string } | null = null;
-  /** Tool names already named aloud this turn (即时 mode dedup). */
-  const announcedTools = new Set<string>();
   /**
-   * Did the model speak for itself this turn? If it did, the mechanical
-   * 「本轮完成」 template must stay quiet — otherwise the same turn is
-   * announced twice, once in the assistant's voice and once as a beep-boop.
+   * Per-session turn state. Sessions run concurrently (Jarvis plus the
+   * sessions it drives), so one session's speech or reply must never silence
+   * or re-word another session's turn end.
+   * - announcedTools: tool names already named aloud this turn (即时 mode dedup).
+   * - spoke: did the model speak for itself this turn? If it did, the
+   *   mechanical 「本轮完成」 template must stay quiet — otherwise the same turn
+   *   is announced twice, once in the assistant's voice and once as a beep-boop.
+   * - lastReply: the last assistant message, consumed by the verbalizer at turn/end.
+   * Entries are dropped at turn/end, so only in-flight turns are kept.
    */
-  let spokeThisTurn = false;
-  /** The text of the last assistant message — consumed by the verbalizer at turn/end. */
-  let lastReplyText = '';
+  type TurnState = { announcedTools: Set<string>; spoke: boolean; lastReply: string };
+  const turns = new Map<string, TurnState>();
+  const turnFor = (sid: string | undefined): TurnState => {
+    const key = sid ?? '';
+    let turn = turns.get(key);
+    if (!turn) {
+      turn = { announcedTools: new Set(), spoke: false, lastReply: '' };
+      turns.set(key, turn);
+    }
+    return turn;
+  };
   /** Per-session voice control: sessions in this set have ALL voice disabled. */
   const disabledSessions = new Set<string>();
   /** Per-session voice OVERRIDE — when a session re-rolls its voice, the chosen
@@ -577,7 +589,6 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       // sentence in the cache ⇒ synthesize and play it right away.
       let accumulated = '';
       let fullSpoken = '';
-      let firstSent = false;
 
       const flushSentences = (force: boolean): void => {
         const re = /[。！？\.\!\?\n]/g;
@@ -587,7 +598,6 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           const sentence = accumulated.slice(lastCut, end);
           const clean = scrubForSpeech(sentence, pickLocale(config.locale).misc.codeOmitted).trim();
           if (clean) {
-            if (!firstSent) { firstSent = true; spokeThisTurn = true; }
             void enqueue('result', clean, sid);
             fullSpoken += clean + ' ';
           }
@@ -598,7 +608,6 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         if (force && accumulated.trim() !== '') {
           const clean = scrubForSpeech(accumulated, pickLocale(config.locale).misc.codeOmitted).trim();
           if (clean) {
-            if (!firstSent) { firstSent = true; spokeThisTurn = true; }
             void enqueue('result', clean, sid);
             fullSpoken += clean + ' ';
           }
@@ -1226,10 +1235,10 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       // so "content received + review passed + can broadcast" = "enqueued"; that
       // is the success node. Synthesis, the duration/partial-file guard, and the
       // fallback-voice retry all run in the background; the queue still serializes
-      // playback (no overlaps). spokeThisTurn is set now so turn/end's template
-      // stays quiet (the model did speak this turn, just not yet audibly).
+      // playback (no overlaps). The turn is marked spoken now so turn/end's
+      // template stays quiet (the model did speak this turn, just not yet audibly).
       void enqueue('tool', text, speakSid);
-      spokeThisTurn = true;
+      turnFor(speakSid).spoke = true;
       return { status: 'queued', ms: 0, url: '', error: '' };
     },
     presentCall(args: { text?: string }) {
@@ -1259,7 +1268,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           t.misc.codeOmitted,
         );
         // Store for the verbalizer — needed even when readReplies is off.
-        if (text !== '') lastReplyText = text;
+        if (text !== '') turnFor(sid).lastReply = text;
         if (!config.readReplies && !state.readReplies) return;
         if (text === '') return;
         void enqueue('result', cap(text, config.narrationCap, t.misc.truncatedSuffix), sid);
@@ -1300,21 +1309,23 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         // run of the same tool is announced once, not fifty times.
         if (!config.statusEnabled || !config.announceToolCall) return;
         const toolName = typeof data?.name === 'string' ? data.name : '';
-        if (!NOTABLE_TOOLS.has(toolName) || announcedTools.has(toolName)) return;
-        announcedTools.add(toolName);
+        const announced = turnFor(sid).announcedTools;
+        if (!NOTABLE_TOOLS.has(toolName) || announced.has(toolName)) return;
+        announced.add(toolName);
         if (!config.statusSpeech) { void enqueue('chime', '', sid); return; }
         void enqueue('status', t.spoken.executingTool.replace('{tool}', toolName), sid);
         return;
       }
       case 'turn/start': {
-        announcedTools.clear();
-        spokeThisTurn = false;
+        turns.delete(sid ?? '');
         if (!config.statusEnabled || !config.announceTurnStart) return;
         if (!config.statusSpeech) { void enqueue('chime', '', sid); return; }
         void enqueue('status', t.spoken.startHandling, sid);
         return;
       }
       case 'turn/end': {
+        const turn = turns.get(sid ?? '');
+        turns.delete(sid ?? '');
         // Jarvis owns this terminal announcement; skip both verbalizer and
         // fallback speech. Older or unavailable services keep the usual path.
         try {
@@ -1322,7 +1333,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         } catch { /* Jarvis must never break the fallback announcement. */ }
         // Already heard this turn: either the model spoke in its own voice, or
         // 逐字朗读 read the reply out. The template would just repeat it.
-        if (spokeThisTurn || config.readReplies) return;
+        if (turn?.spoke || config.readReplies) return;
         if (!config.statusEnabled || !config.announceTurnEnd) return;
 
         // Abnormal end reasons get a specific phrase instead of "已完成".
@@ -1347,10 +1358,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         // Verbalizer pass: ask a model to turn the reply into one spoken
         // sentence with emotional framing. Falls back to the template on
         // timeout/error/empty. Runs async so it never blocks the event loop.
-        if (config.summarizeResult && lastReplyText) {
+        const lastReply = turn?.lastReply ?? '';
+        if (config.summarizeResult && lastReply) {
           void (async () => {
-            const spoken = await summarizeReply(lastReplyText, sid);
-            if (spoken) return; // spokeThisTurn set inside, sentences already enqueued
+            const spoken = await summarizeReply(lastReply, sid);
+            if (spoken) return; // sentences already enqueued
             // Fallback to template — empty phraseTurnEnd ⇒ locale default
             const title = titleFor(session);
             const phrase = (config.phraseTurnEnd !== '' ? config.phraseTurnEnd : t.spoken.phraseTurnEnd)
