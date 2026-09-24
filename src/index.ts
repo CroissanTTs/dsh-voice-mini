@@ -205,6 +205,23 @@ const PRESETS: Record<string, Partial<MiniConfig>> = {
 
 const PRESET_KEYS = ['instant', 'default', 'quiet'] as const;
 
+/** Keys the gear bundles decide; every preset sets the same ones. readReplies
+ * is bundled only as a baseline — the panel owns it as a separate mode. */
+const PRESET_FIELDS = (Object.keys(PRESETS.default!) as Array<keyof MiniConfig>).filter((k) => k !== 'readReplies');
+
+/** Drops saved edits of gear-owned keys, except the ones `keep` sets itself. */
+export function withoutPresetEdits(saved: Partial<MiniConfig>, keep: Partial<MiniConfig> = {}): Partial<MiniConfig> {
+  const out: Partial<MiniConfig> = { ...saved };
+  for (const k of PRESET_FIELDS) if (!(k in keep)) delete out[k];
+  return out;
+}
+
+/** Saved edits that make the live config differ from the chosen gear. */
+export function presetEdits(saved: Partial<MiniConfig>, preset: string): string[] {
+  const bundle = PRESETS[preset] ?? PRESETS.default!;
+  return PRESET_FIELDS.filter((k) => k in saved && saved[k] !== bundle[k]);
+}
+
 /** Tools worth naming aloud in 即时 mode (action-shaped, not lookups). */
 const NOTABLE_TOOLS = new Set(['bash', 'write', 'edit', 'task', 'subagent', 'web_search', 'web_fetch']);
 
@@ -734,6 +751,9 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   /** Apply a modal/panel patch AND persist it to the plugin config file, so
    * the change survives plugin updates and restarts. */
   const applyOverride = (patch: Partial<MiniConfig>) => {
+    // Picking a gear applies it whole: earlier single-switch edits to the
+    // gear's own keys would otherwise keep masking it with no visible cause.
+    if (patch.preset !== undefined) persistedConfig = withoutPresetEdits(persistedConfig, patch);
     persistedConfig = { ...persistedConfig, ...patch };
     savePersistedConfig(persistedConfig);
     state.readReplies = current().readReplies;
@@ -812,6 +832,10 @@ export function apply(ctx: Context, rawConfig: unknown): void {
        * (en→en-GB-ThomasNeural, zh→zh-CN-YunjianNeural). Exposed so the
        * Jarvis panel shows the effective voice and the jarvis plugin reads it. */
       effectiveJarvisVoice: config.jarvisVoice || (config.locale === 'en' ? 'en-GB-ThomasNeural' : 'zh-CN-YunjianNeural'),
+      /** dsh-harness-jarvis is loaded right now (jarvisLinked only remembers it once was). */
+      jarvisConnected: jarvisService !== undefined,
+      /** Gear-owned switches the user changed by hand, so the panel can offer to restore the gear. */
+      presetOverrides: presetEdits(persistedConfig, config.preset),
       /** What a session actually gets: the configured palette or the backend's. */
       effectivePalette: config.voicePalette.length > 0 ? config.voicePalette : [...defaultPalette(config.backend, config.locale)],
       lastSessionId,
@@ -1534,7 +1558,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           }
           if (url === '/config' && req.method === 'POST') {
             const body = JSON.parse((await readBody(req)) || '{}');
-            if (body.reset === true) resetOverride();
+            if (body?.reset === true) resetOverride();
             else applyOverride(parseConfigPatch(body));
             return sendJson(res, 200, current());
           }

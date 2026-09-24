@@ -12,7 +12,7 @@
 - **Status broadcasts** — short spoken notices for `approval/asked`, `ask_user_question`, `turn/start`, `turn/end`, `todo/write`, with **specific phrases for abnormal ends** (aborted / blocked / error / max-tokens / interrupted).
 - **Per-session voices** — each session gets a distinct-but-subtle voice (FNV-1a hash → palette index + ±6% rate jitter), so you can tell conversations apart by ear without picking voices by hand.
 - **Chimes** — a system-notification-style earcon (the macOS Glass sound, or synthesized ding/ping/soft/none) rings **once per burst, before speech content only**. Quiet mode = chime-only, no speech.
-- **Three presets** — 即时 / 默认 / 少量 — bundle the granular toggles into one gear; any single field still overrides.
+- **Three presets** — 即时 / 默认 / 少量 — bundle the granular toggles into one gear; any single field still overrides. Picking a gear in the modal applies it whole: earlier modal edits to gear-owned fields are cleared (locale, voices, Jarvis voice and speech mode are kept), and the modal shows how many fields differ from the gear.
 - **i18n** — full **zh / en** switch for all UI text, spoken phrases, and the verbalizer prompt; auto-detected from the browser locale, overridable from the panel.
 - **Monitoring panel** — token / latency / system stats with SVG sparklines and per-kind breakdown.
 - **Native floating pet** (macOS) — a Swift `NSPanel` widget that hovers across all Spaces, reads live state from the plugin's loopback-gated `/pet/*` routes, and expands on hover to show the current utterance + pending attention.
@@ -110,6 +110,7 @@ Key fields (all overridable from the settings modal or `POST /voice-mini/config`
 npm test            # smoke: deferred injection, routes, pet auth
 npm run test:summarize   # 8 verbalizer paths
 npm run test:presets     # 6 preset-resolution cases
+npm run test:settings-panel  # modal: gear clears hand edits, presetOverrides, jarvisConnected
 npm run test:agency      # 4 "who speaks" rules
 npm run test:voices      # per-session determinism + spread
 npm run test:i18n        # 21 cases: dict parity + locale switch of spoken phrases

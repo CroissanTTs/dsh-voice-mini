@@ -56,7 +56,8 @@
     "test:i18n": "node test-i18n.mjs",
     "test:reroll": "node test-reroll.mjs",
     "test:persist": "node test-persist.mjs",
-    "test:pause": "node test-pause.mjs"
+    "test:pause": "node test-pause.mjs",
+    "test:settings-panel": "node --test test-settings-panel.mjs"
   },
   "dsh": {
     "bundle": {

@@ -140,6 +140,7 @@ PRESETS[preset]  <  组合配置里显式写的键  <  设置面板的改动  < 
 
 - "设置面板的改动"靠**与组合默认值比较**判定：面板总是返回完整对象，只有和 `entry` 不同的值才算用户改过，这样没动过的面板不会盖掉档位。
 - 所以 `cordis.patch.yml` 里手写的 `announceTurnEnd: true` 能在切到少量沟通后依然生效。
+- 在弹窗里**选档位会整档生效**：之前在弹窗里单独改过的档位字段（事件提醒、提示音、总结、语速音量等）一并清掉；语言、音色、贾维斯音色、说话方式不属于档位，保留不动。弹窗会显示"已单独调整 N 项 · 恢复档位设置"。
 
 ### 关键技术点（都是踩过坑的）
 
@@ -155,6 +156,7 @@ npm install --cache /tmp/npm-cache   # 本机 ~/.npm 是 root 所有，绕一下
 npm run build                        # tsc + 客户端 bundle
 node test-plugin.mjs                 # 无 harness 自检（会真实发声，含宠物端点鉴权检查）
 node test-presets.mjs                # 档位解析优先级自检
+node --test test-settings-panel.mjs  # 弹窗：选档位清单独改动、presetOverrides、jarvisConnected
 node test-agency.mjs                 # "谁在说"自检：模型口播 vs 模板不重复
 node test-voices.mjs               # 按会话分配音色：确定性 + 分布 + 碰撞率
 node test-summarize.mjs            # 情绪化总结（verbalizer）：mock LLM/超时/报错/防重复/逐字朗读/无LLM/空回复
