@@ -221,6 +221,7 @@ const STATUS_KEYS: ReadonlyArray<keyof MiniConfig> = [
  * `source` is 'jarvis' for Jarvis's own voice (its announcements and its
  * session's replies), 'session' for narration of any other conversation. */
 interface SpeechSignal {
+  text?: string;
   phase: 'start' | 'end';
   id: string;
   source: 'jarvis' | 'session';
@@ -1030,14 +1031,14 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   let speechSeq = 0;
 
   /** Reports one utterance to Jarvis; returns the matching end reporter. */
-  function reportSpeech(item: { jarvis?: boolean; sessionId?: string }): () => void {
+  function reportSpeech(item: { jarvis?: boolean; sessionId?: string; text?: string }): () => void {
     const svc = jarvisService;
     if (typeof svc?.speech !== 'function') return () => {};
     const id = `vm-${Date.now().toString(36)}-${(speechSeq += 1)}`;
     const source: SpeechSignal['source'] =
       item.jarvis === true || (item.sessionId !== undefined && item.sessionId === svc.sessionId) ? 'jarvis' : 'session';
     const send = (phase: SpeechSignal['phase']) => {
-      try { svc.speech!({ phase, id, source, ...(item.sessionId ? { sessionId: item.sessionId } : {}) }); } catch { /* Jarvis must never break playback */ }
+      try { svc.speech!({ phase, id, source, ...(item.sessionId ? { sessionId: item.sessionId } : {}), ...(phase === 'start' && item.text ? { text: item.text } : {}) }); } catch { /* Jarvis must never break playback */ }
     };
     send('start');
     let ended = false;
@@ -1072,7 +1073,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     cancelPlayback(); // kill current afplay if any
     const cached = lastBySession.get(sid)!;
     speaking = { kind: 'replay', text: cached.text, startedAt: Date.now(), voice: cached.voice };
-    const endSpeech = reportSpeech({ sessionId: sid });
+    const endSpeech = reportSpeech({ sessionId: sid, text: cached.text });
     try {
       const config = current();
       const backend = makeBackend(config.backend);

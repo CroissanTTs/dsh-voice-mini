@@ -90,6 +90,14 @@ const assertSilent = async (ctx) => {
 
 // Preserve the original six speech-signal checks alongside ownership coverage.
 describe('等价类', () => {
+  it('assistant subtitles match scrubbed narration exactly', async () => {
+    const ctx = mkCtx({ config: { readReplies: true } });
+    ctx.fire('assistant/message', { message: { content: [{ type: 'text', text: '**完成** [说明](https://example.com) `hidden`。' }] } });
+    const state = await drained(ctx);
+    assert.equal(ctx.signals[0].text, '完成 说明 。');
+    assert.equal(ctx.signals[0].text, state.recent[0].text);
+  });
+
   it('Jarvis line reports start then end', async () => {
     const ctx = mkCtx();
     await request(ctx.route, '/voice-mini/test', { text: '晚上好，先生。', jarvis: true });
@@ -97,6 +105,19 @@ describe('等价类', () => {
     assert.deepEqual(ctx.signals.map(({ phase, source }) => ({ phase, source })), [
       { phase: 'start', source: 'jarvis' }, { phase: 'end', source: 'jarvis' },
     ]);
+  });
+  it('start includes spoken words and end omits them', async () => {
+    const ctx = mkCtx();
+    await request(ctx.route, '/voice-mini/test', { text: '晚上好，先生。', jarvis: true });
+    await drained(ctx);
+    assert.equal(ctx.signals[0].text, '晚上好，先生。');
+    assert.equal(Object.hasOwn(ctx.signals[1], 'text'), false);
+  });
+  it('replay includes the cached spoken text', async () => {
+    const ctx = mkCtx(); finishTurn(ctx); await drained(ctx);
+    await request(ctx.route, '/voice-mini/replay', { sessionId: WORKER_SID });
+    assert.equal(ctx.signals.at(-2).text, TEMPLATE);
+    assert.equal(Object.hasOwn(ctx.signals.at(-1), 'text'), false);
   });
   it('start/end share one id', async () => {
     const ctx = mkCtx();
@@ -221,6 +242,17 @@ describe('等价类', () => {
 });
 
 describe('边界值', () => {
+  it('empty scrubbed reply emits no subtitle or speech', async () => {
+    const ctx = mkCtx({ config: { readReplies: true } });
+    ctx.fire('assistant/message', { message: { content: [{ type: 'text', text: '`only code`' }] } });
+    await drained(ctx); assert.deepEqual(ctx.signals, []);
+  });
+  it('subtitle preserves the complete queued line before Jarvis caps it', async () => {
+    const ctx = mkCtx(); const text = '😀'.repeat(121);
+    await request(ctx.route, '/voice-mini/test', { text, jarvis: true });
+    await drained(ctx); assert.equal(ctx.signals[0].text, text);
+  });
+
   for (const value of [undefined, null, 0, 1, '', 'true', {}, Promise.resolve(true)]) {
     it(`only exact true claims a turn: ${String(value)}`, async () => {
       const ctx = mkCtx({ jarvis: { claimsTurnEnd: () => value } });
