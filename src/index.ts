@@ -506,6 +506,42 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   };
   /** Per-session voice control: sessions in this set have ALL voice disabled. */
   const disabledSessions = new Set<string>();
+  /** Debug-only: sessions we've already logged the shape of, so the
+   * DSH_VOICE_MINI_DEBUG dump fires once per session, not per event. */
+  const loggedSessions = new Set<string>();
+  /** Best-effort parent-state inheritance: when a NEW session id appears (e.g.
+   * a subagent spawned under the main conversation), inherit the parent's
+   * voice-OFF state so the subagent doesn't start narrating when the user
+   * silenced the parent — and, symmetrically, stays ON when the parent is ON.
+   *
+   * The host's session/agent objects carry a parent/root reference, but its
+   * field name isn't in the plugin's type deps (dsh-agent/dsh-session are host
+   * packages), so this matches by VALUE: walk `obj`'s string fields (+ the
+   * `.session`/`.agent` sub-objects one level deep) and if any value equals an
+   * id already in disabledSessions, treat `sid` as that session's descendant
+   * and inherit OFF. Re-checked every event/speak-call (no cache) so toggling
+   * the parent OFF later propagates to already-running children too. */
+  function inheritIfDisabled(obj: unknown, sid: string | undefined): void {
+    if (!sid || disabledSessions.has(sid) || disabledSessions.size === 0) return;
+    const probe = (o: unknown): string | null => {
+      if (!o || typeof o !== 'object') return null;
+      const rec = o as Record<string, unknown>;
+      for (const k of Object.keys(rec)) {
+        const v = rec[k];
+        if (typeof v === 'string' && disabledSessions.has(v)) return v;
+      }
+      return null;
+    };
+    const parent = probe(obj) ?? probe((obj as any)?.session) ?? probe((obj as any)?.agent);
+    if (parent) {
+      disabledSessions.add(sid);
+      ctx.logger.warn(`dsh-voice-mini: session ${sid.slice(0, 8)}… inherited voice-OFF from disabled parent ${parent.slice(0, 8)}…`);
+    } else if (process.env.DSH_VOICE_MINI_DEBUG && !loggedSessions.has(sid)) {
+      loggedSessions.add(sid);
+      const keys = (o: unknown): string => (o && typeof o === 'object' ? Object.keys(o as object).join(',') : String(o));
+      ctx.logger.warn(`dsh-voice-mini: [debug] new session ${sid.slice(0, 8)}… obj=[${keys(obj)}] session=[${keys((obj as any)?.session)}] — no disabled parent matched`);
+    }
+  }
   /** Per-session voice OVERRIDE — when a session re-rolls its voice, the chosen
    * {voice, rateJitter} lives here and beats the deterministic hash. In-memory
    * only (resets on restart, falling back to the hash). */
@@ -1248,6 +1284,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       const text = String(args.text ?? '').trim();
       if (text === '') throw new Error('speak: text must not be empty');
       const speakSid = exec?.agent?.session?.id;
+      // Inherit the parent session's voice-OFF state: a subagent spawned under
+      // a silenced main conversation must not narrate either. Best-effort value
+      // match (see inheritIfDisabled). Re-checked per call so a parent toggled
+      // OFF mid-run propagates to already-running children.
+      if (speakSid) inheritIfDisabled(exec?.agent, speakSid);
       // Per-session control: if this session is disabled, the speak tool is a no-op.
       if (speakSid && disabledSessions.has(speakSid)) {
         return { status: 'skipped', ms: 0, url: '', error: 'voice disabled for this session' };
@@ -1276,8 +1317,8 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     const config = current();
     const t = pickLocale(config.locale);
     const sid = typeof session?.id === 'string' ? session.id : undefined;
-    if (sid) lastSessionId = sid;
-    // Per-session control: if this session is disabled, skip everything.
+    if (sid) { lastSessionId = sid; inheritIfDisabled(session, sid); }
+    // Per-session control: if this session is disabled (itself or by inheritance), skip everything.
     if (sid && disabledSessions.has(sid)) return;
     const type = event?.type;
     const data = event?.data ?? {};
