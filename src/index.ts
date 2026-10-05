@@ -506,40 +506,56 @@ export function apply(ctx: Context, rawConfig: unknown): void {
   };
   /** Per-session voice control: sessions in this set have ALL voice disabled. */
   const disabledSessions = new Set<string>();
-  /** Debug-only: sessions we've already logged the shape of, so the
-   * DSH_VOICE_MINI_DEBUG dump fires once per session, not per event. */
+  /** Every session id ever observed (event handler + speak tool). Used to
+   * detect subagent sessions: a session whose object references a DIFFERENT
+   * already-seen session id is a child/subagent → default voice OFF. */
+  const seenSessionIds = new Set<string>();
+  /** Debug: sessions whose object shape we've already dumped (once each). */
   const loggedSessions = new Set<string>();
-  /** Best-effort parent-state inheritance: when a NEW session id appears (e.g.
-   * a subagent spawned under the main conversation), inherit the parent's
-   * voice-OFF state so the subagent doesn't start narrating when the user
-   * silenced the parent — and, symmetrically, stays ON when the parent is ON.
+  /** Subagent default-OFF policy + parent inheritance.
    *
    * The host's session/agent objects carry a parent/root reference, but its
    * field name isn't in the plugin's type deps (dsh-agent/dsh-session are host
-   * packages), so this matches by VALUE: walk `obj`'s string fields (+ the
-   * `.session`/`.agent` sub-objects one level deep) and if any value equals an
-   * id already in disabledSessions, treat `sid` as that session's descendant
-   * and inherit OFF. Re-checked every event/speak-call (no cache) so toggling
-   * the parent OFF later propagates to already-running children too. */
-  function inheritIfDisabled(obj: unknown, sid: string | undefined): void {
-    if (!sid || disabledSessions.has(sid) || disabledSessions.size === 0) return;
-    const probe = (o: unknown): string | null => {
-      if (!o || typeof o !== 'object') return null;
+   * packages; asar type extraction was unreliable here). So this detects
+   * subagents by VALUE, recursively (cycle-safe): walk `obj` to any depth and
+   * if any string field equals a DIFFERENT session id we've already seen, this
+   * session is a child of that one → it's a subagent → default voice OFF.
+   * Implements "subagents don't default to TTS": a subagent is silent unless
+   * explicitly toggled ON, regardless of the parent's state. Inheritance falls
+   * out for free — a disabled parent is also a known id, so its children go OFF.
+   *
+   * Re-checked every event/speak-call (no result cache) so a parent toggled OFF
+   * later, or a subagent spawned after the policy starts, all resolve. On first
+   * sight we also dump the object shape (truncated) so the exact parentage
+   * field can be confirmed if the runtime object is richer than expected. */
+  function applySubagentPolicy(obj: unknown, sid: string | undefined): void {
+    if (!sid) return;
+    const isNew = !seenSessionIds.has(sid);
+    seenSessionIds.add(sid);
+    if (isNew && !loggedSessions.has(sid)) {
+      loggedSessions.add(sid);
+      let dump = '';
+      try { dump = JSON.stringify(obj, (_k, v) => (typeof v === 'string' ? v.slice(0, 24) : v)) ?? ''; } catch { dump = '(circular)'; }
+      ctx.logger.warn(`dsh-voice-mini: new session ${sid.slice(0, 8)}… shape: ${dump.slice(0, 500)}`);
+    }
+    if (disabledSessions.has(sid)) return;
+    const visited = new Set<unknown>();
+    const findRef = (o: unknown, depth: number): string | null => {
+      if (!o || typeof o !== 'object' || depth > 5 || visited.has(o)) return null;
+      visited.add(o);
       const rec = o as Record<string, unknown>;
       for (const k of Object.keys(rec)) {
         const v = rec[k];
-        if (typeof v === 'string' && disabledSessions.has(v)) return v;
+        if (typeof v === 'string' && v !== sid && (disabledSessions.has(v) || seenSessionIds.has(v))) return v;
+        if (v && typeof v === 'object') { const m = findRef(v, depth + 1); if (m) return m; }
       }
       return null;
     };
-    const parent = probe(obj) ?? probe((obj as any)?.session) ?? probe((obj as any)?.agent);
-    if (parent) {
+    const ref = findRef(obj, 0);
+    if (ref) {
+      const inherited = disabledSessions.has(ref);
       disabledSessions.add(sid);
-      ctx.logger.warn(`dsh-voice-mini: session ${sid.slice(0, 8)}… inherited voice-OFF from disabled parent ${parent.slice(0, 8)}…`);
-    } else if (process.env.DSH_VOICE_MINI_DEBUG && !loggedSessions.has(sid)) {
-      loggedSessions.add(sid);
-      const keys = (o: unknown): string => (o && typeof o === 'object' ? Object.keys(o as object).join(',') : String(o));
-      ctx.logger.warn(`dsh-voice-mini: [debug] new session ${sid.slice(0, 8)}… obj=[${keys(obj)}] session=[${keys((obj as any)?.session)}] — no disabled parent matched`);
+      ctx.logger.warn(`dsh-voice-mini: session ${sid.slice(0, 8)}… ${inherited ? 'inherited voice-OFF' : 'subagent default-OFF'} (references ${ref.slice(0, 8)}…)`);
     }
   }
   /** Per-session voice OVERRIDE — when a session re-rolls its voice, the chosen
@@ -1284,11 +1300,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       const text = String(args.text ?? '').trim();
       if (text === '') throw new Error('speak: text must not be empty');
       const speakSid = exec?.agent?.session?.id;
-      // Inherit the parent session's voice-OFF state: a subagent spawned under
-      // a silenced main conversation must not narrate either. Best-effort value
-      // match (see inheritIfDisabled). Re-checked per call so a parent toggled
-      // OFF mid-run propagates to already-running children.
-      if (speakSid) inheritIfDisabled(exec?.agent, speakSid);
+      // Subagent default-OFF + parent inheritance: a subagent (detected via a
+      // reference to a known parent session on exec.agent) defaults to silent,
+      // and inherits OFF when the parent is silenced. Recursive value match
+      // (see applySubagentPolicy). Re-checked per call.
+      if (speakSid) applySubagentPolicy(exec?.agent, speakSid);
       // Per-session control: if this session is disabled, the speak tool is a no-op.
       if (speakSid && disabledSessions.has(speakSid)) {
         return { status: 'skipped', ms: 0, url: '', error: 'voice disabled for this session' };
@@ -1317,8 +1333,8 @@ export function apply(ctx: Context, rawConfig: unknown): void {
     const config = current();
     const t = pickLocale(config.locale);
     const sid = typeof session?.id === 'string' ? session.id : undefined;
-    if (sid) { lastSessionId = sid; inheritIfDisabled(session, sid); }
-    // Per-session control: if this session is disabled (itself or by inheritance), skip everything.
+    if (sid) { lastSessionId = sid; applySubagentPolicy(session, sid); }
+    // Per-session control: if this session is disabled (itself, inherited, or as a subagent default), skip everything.
     if (sid && disabledSessions.has(sid)) return;
     const type = event?.type;
     const data = event?.data ?? {};
